@@ -114,6 +114,9 @@ const canvasModule = (() => {
     
     // Set initial connection status
     updateConnectionStatus(false);
+    
+    // Load the default canvas
+    loadCanvas('default');
   };
 
   // Save canvas before resize or unload
@@ -261,7 +264,20 @@ const handleMouseMove = (e) => {
         case 'brush':
             drawBrush(x, y);
             break;
-        // Add other tools here as needed
+        case 'pencil':
+            drawPencil(x, y);
+            break;
+        case 'eraser':
+            erase(x, y);
+            break;
+        case 'spray':
+            drawSpray(x, y);
+            break;
+    }
+    
+    // Add point to current stroke
+    if (currentStroke) {
+        currentStroke.points.push({ x, y });
     }
     
     // Emit drawing data to other users
@@ -294,6 +310,8 @@ const stopDrawing = () => {
     // Save stroke if needed
     if (currentStroke && currentStroke.points.length > 0) {
         strokes.push(currentStroke);
+        // Save to MongoDB
+        saveStroke();
         currentStroke = null;
     }
 };
@@ -461,25 +479,38 @@ const handleTouchStart = (e) => {
 
   // Save stroke to server
   const saveStroke = async () => {
-    if (!currentCanvasId) return;
+    if (!currentCanvasId || !currentStroke) return;
     
     try {
-      await fetch(`${API_URL}/strokes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authModule.getToken()}`
-        },
-        body: JSON.stringify({
-          canvas: currentCanvasId,
-          points: currentStroke.points,
-          color: currentStroke.color,
-          width: currentStroke.width,
-          tool: currentStroke.tool
-        })
-      });
+        // Get canvas dimensions for scaling
+        const canvasRect = canvas.getBoundingClientRect();
+        const scaleX = canvasRect.width / canvas.width;
+        const scaleY = canvasRect.height / canvas.height;
+        
+        // Scale points back to relative coordinates
+        const scaledPoints = currentStroke.points.map(point => ({
+            x: point.x * scaleX,
+            y: point.y * scaleY
+        }));
+        
+        await fetch(`${API_URL}/strokes`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authModule.getToken()}`
+            },
+            body: JSON.stringify({
+                canvas: currentCanvasId,
+                points: scaledPoints,
+                color: currentStroke.color,
+                width: currentStroke.width,
+                tool: currentStroke.tool
+            })
+        });
+        
+        console.log('Stroke saved successfully');
     } catch (error) {
-      console.error('Error saving stroke:', error);
+        console.error('Error saving stroke:', error);
     }
   };
 
@@ -538,52 +569,164 @@ const handleTouchStart = (e) => {
   // Load canvas
   const loadCanvas = async (canvasId) => {
     try {
-      // Get canvas data
-      const response = await fetch(`${API_URL}/canvas/${canvasId}`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to load canvas');
-      }
-      
-      // Clear current canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Load image data
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      };
-      img.src = data.data.imageData;
-      
-      // Set current canvas ID
-      currentCanvasId = canvasId;
-      
-      // Join canvas room via socket
-      if (socket) {
-        socket.emit('joinCanvas', { canvasId });
-      }
-      
-      // Load strokes
-      loadStrokes(canvasId);
+        currentCanvasId = canvasId;
+        
+        // Clear current canvas first
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // For 'default' canvas, create it if it doesn't exist
+        if (canvasId === 'default') {
+            try {
+                const response = await fetch(`${API_URL}/canvas/default`);
+                if (!response.ok) {
+                    // Create default canvas if it doesn't exist
+                    await fetch(`${API_URL}/canvas`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authModule.getToken()}`
+                        },
+                        body: JSON.stringify({
+                            name: 'Default Canvas',
+                            isPublic: true,
+                            imageData: canvas.toDataURL('image/png')
+                        })
+                    });
+                }
+            } catch (error) {
+                console.error('Error checking default canvas:', error);
+            }
+        }
+        
+        // Get canvas data
+        const response = await fetch(`${API_URL}/canvas/${canvasId}`);
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.message || 'Failed to load canvas');
+        }
+        
+        // Load image data
+        if (data.data.imageData) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    resolve();
+                };
+                img.src = data.data.imageData;
+            }).then(() => {
+                // Join canvas room via socket after image is loaded
+                if (socket) {
+                    socket.emit('joinCanvas', { canvasId });
+                }
+                // Now load any new strokes that aren't in the image
+                loadStrokes(canvasId);
+            });
+        } else {
+            // If no image data, just load strokes
+            if (socket) {
+                socket.emit('joinCanvas', { canvasId });
+            }
+            loadStrokes(canvasId);
+        }
     } catch (error) {
-      console.error('Error loading canvas:', error);
+        console.error('Error loading canvas:', error);
     }
   };
 
   // Load strokes for a canvas
   const loadStrokes = async (canvasId) => {
     try {
-      const response = await fetch(`${API_URL}/strokes/${canvasId}`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to load strokes');
-      }
-      
-      // TODO: Replay strokes animation if needed
+        const response = await fetch(`${API_URL}/strokes/${canvasId}`);
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.message || 'Failed to load strokes');
+        }
+        
+        // Get current canvas dimensions for scaling
+        const canvasRect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / canvasRect.width;
+        const scaleY = canvas.height / canvasRect.height;
+        
+        // Replay all strokes
+        if (data.data && data.data.length > 0) {
+            console.log(`Replaying ${data.data.length} strokes...`);
+            
+            // Temporarily disable real-time updates while replaying
+            const wasConnected = socket?.connected;
+            if (wasConnected) {
+                socket.disconnect();
+            }
+            
+            for (const stroke of data.data) {
+                // Save current state
+                const savedState = {
+                    color: currentColor,
+                    size: currentSize,
+                    tool: currentTool,
+                    lastX,
+                    lastY,
+                    isDrawing
+                };
+                
+                // Set state for this stroke
+                currentColor = stroke.color;
+                currentSize = stroke.width;
+                currentTool = stroke.tool;
+                isDrawing = true;
+                
+                // Draw each point with proper scaling
+                for (let i = 0; i < stroke.points.length; i++) {
+                    const point = stroke.points[i];
+                    // Scale coordinates to match current canvas size
+                    const scaledX = point.x * scaleX;
+                    const scaledY = point.y * scaleY;
+                    
+                    if (i === 0) {
+                        lastX = scaledX;
+                        lastY = scaledY;
+                        continue;
+                    }
+                    
+                    switch (stroke.tool) {
+                        case 'brush':
+                            drawBrush(scaledX, scaledY);
+                            break;
+                        case 'pencil':
+                            drawPencil(scaledX, scaledY);
+                            break;
+                        case 'eraser':
+                            erase(scaledX, scaledY);
+                            break;
+                        case 'spray':
+                            drawSpray(scaledX, scaledY);
+                            break;
+                    }
+                    
+                    lastX = scaledX;
+                    lastY = scaledY;
+                }
+                
+                // Restore state
+                currentColor = savedState.color;
+                currentSize = savedState.size;
+                currentTool = savedState.tool;
+                lastX = savedState.lastX;
+                lastY = savedState.lastY;
+                isDrawing = savedState.isDrawing;
+            }
+            
+            // Re-enable real-time updates after replay
+            if (wasConnected) {
+                socket.connect();
+            }
+            
+            console.log('Finished replaying strokes');
+        }
     } catch (error) {
-      console.error('Error loading strokes:', error);
+        console.error('Error loading strokes:', error);
     }
   };
 

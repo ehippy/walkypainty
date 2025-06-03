@@ -66,14 +66,29 @@ exports.getCanvases = async (req, res) => {
   }
 };
 
-// @desc    Get single canvas
+// @desc    Get a single canvas
 // @route   GET /api/canvas/:id
-// @access  Public/Private (depends on canvas visibility)
+// @access  Public
 exports.getCanvas = async (req, res) => {
   try {
-    const canvas = await Canvas.findById(req.params.id)
-      .populate('creator', 'username avatar')
-      .populate('contributors', 'username avatar');
+    let canvas;
+    
+    if (req.params.id === 'default') {
+      // Try to find existing default canvas
+      canvas = await Canvas.findOne({ name: 'Default Canvas', isPublic: true });
+      
+      // If no default canvas exists, create one
+      if (!canvas) {
+        canvas = await Canvas.create({
+          name: 'Default Canvas',
+          imageData: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', // Empty transparent image
+          isPublic: true,
+          defaultCanvas: true
+        });
+      }
+    } else {
+      canvas = await Canvas.findById(req.params.id);
+    }
 
     if (!canvas) {
       return res.status(404).json({
@@ -82,20 +97,7 @@ exports.getCanvas = async (req, res) => {
       });
     }
 
-    // Check if canvas is private and user is not the creator or a contributor
-    if (
-      !canvas.isPublic &&
-      (!req.user || 
-        (req.user.id !== canvas.creator.toString() && 
-         !canvas.contributors.some(contributor => contributor._id.toString() === req.user.id)))
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: 'Not authorized to access this canvas'
-      });
-    }
-
-    res.status(200).json({
+    res.json({
       success: true,
       data: canvas
     });

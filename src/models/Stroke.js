@@ -7,9 +7,17 @@ const StrokeSchema = new mongoose.Schema({
     required: true
   },
   user: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed, // Allow both ObjectId and String
+    required: true,
     ref: 'User',
-    required: true
+    validate: {
+      validator: function(v) {
+        // Accept both ObjectId and guest_* string format
+        return mongoose.Types.ObjectId.isValid(v) || 
+               (typeof v === 'string' && v.startsWith('guest_'));
+      },
+      message: 'User must be either an ObjectId or a guest ID string'
+    }
   },
   points: [{
     x: {

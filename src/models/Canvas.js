@@ -13,7 +13,9 @@ const CanvasSchema = new mongoose.Schema({
   creator: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: function() {
+      return !this.defaultCanvas; // Creator only required for non-default canvases
+    }
   },
   contributors: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -22,6 +24,10 @@ const CanvasSchema = new mongoose.Schema({
   isPublic: {
     type: Boolean,
     default: true
+  },
+  defaultCanvas: {
+    type: Boolean,
+    default: false
   },
   createdAt: {
     type: Date,
