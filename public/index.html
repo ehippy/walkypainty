@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>WalkyPainty - Collaborative Canvas</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="mini-status">
+      <div class="connection-pill">
+        <span id="connectionStatus" class="status-offline">Offline</span>
+        <i class="fas fa-users"></i><span id="activeUsersCount">0</span>
+      </div>
+    </div>
+
+    <main class="fullscreen-canvas">
+      <div class="canvas-container">
+        <canvas id="canvas"></canvas>
+      </div>
+
+      <div class="floating-toolbar">
+        <button class="toggle-toolbar"><i class="fas fa-paint-brush"></i></button>
+        <div class="toolbar-content">
+          <div class="tool-section">
+            <div class="tools">
+              <button class="tool-btn active" data-tool="brush" title="Brush">
+                <i class="fas fa-paint-brush"></i>
+              </button>
+              <button class="tool-btn" data-tool="pencil" title="Pencil">
+                <i class="fas fa-pencil-alt"></i>
+              </button>
+              <button class="tool-btn" data-tool="eraser" title="Eraser">
+                <i class="fas fa-eraser"></i>
+              </button>
+              <button class="tool-btn" data-tool="spray" title="Spray">
+                <i class="fas fa-spray-can"></i>
+              </button>
+            </div>
+
+            <div class="color-picker">
+              <input type="color" id="colorPicker" value="#000000">
+            </div>
+            
+            <div class="color-presets">
+              <button class="color-btn active" style="background-color: #000000;" data-color="#000000"></button>
+              <button class="color-btn" style="background-color: #ff0000;" data-color="#ff0000"></button>
+              <button class="color-btn" style="background-color: #00ff00;" data-color="#00ff00"></button>
+              <button class="color-btn" style="background-color: #0000ff;" data-color="#0000ff"></button>
+              <button class="color-btn" style="background-color: #ffff00;" data-color="#ffff00"></button>
+            </div>
+            
+            <div class="size-slider">
+              <input type="range" id="sizeSlider" min="1" max="50" value="5">
+              <span id="sizeValue">5px</span>
+            </div>
+            
+            <div class="action-buttons">
+              <button id="clearBtn" class="btn btn-circle" title="Clear Canvas"><i class="fas fa-trash"></i></button>
+              <button id="fullscreenBtn" class="btn btn-circle" title="Fullscreen"><i class="fas fa-expand"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+  <script src="js/auth-simple.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
